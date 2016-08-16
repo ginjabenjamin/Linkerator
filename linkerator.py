@@ -27,11 +27,15 @@ def check_resource(link, host, allResults):
 		# Skip check if we have already retrieved the link
 		if(link in links):
 			return
-		
+
 		try:
 			r = requests.get(link)
+		except requests.exceptions.SSLError as ssle:
+			print('[-] Invalid certificate: %s' % link)
+			links[link] = 526
+			
 		except ConnectionError as exc:
-			print('[-] Server not found: %s ' % link)
+			print('[-] Server not found: %s - %s' % (link, exc))
 			links[link] = 666
 		else:
 			try:
