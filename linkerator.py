@@ -10,6 +10,7 @@ __copyright__ = "Copyright 2016, Hivemind"
 __license__ = "GPL"
 __version__ = "1.0"
 
+import re
 import time
 import argparse
 import requests
@@ -89,14 +90,25 @@ def main():
 
 	if(args['urls']):
 		for url in args['urls']:
+			# Prefix HTTP if it was not specified
+			if(url.find('htt') == -1):
+				url = 'http://' + url
+
 			urlBase = urlparse(url)
 			print('[+] Checking: ' + urlBase.geturl())
 			print('[+] Performed on: ' + time.strftime("%c"))
-			base = requests.get(urlBase.geturl()).text
+
+			try:
+				base = requests.get(urlBase.geturl()).text
+			except ConnectionError as exc:
+				print('[-] Source server not found: %s ' % urlBase.geturl())
+				continue
 			
 			# Complete lazy external references
-			base = base.replace(r'src="//', r'src="http://')
-			base = base.replace(r"src='//", r"src=1http://")
+			# base = base.replace(r'src="//', r'src="http://')
+			# base = base.replace(r"src='//", r"src='http://")
+			base = re.sub(r'src\s?=\s?\'//', r"src='http://", base)
+			base = re.sub(r'src\s?=\s?\"//', r'src="http://', base)
 			
 			soup = BeautifulSoup(base, 'html.parser') 
 
@@ -132,4 +144,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
