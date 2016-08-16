@@ -1,5 +1,5 @@
 '''
-Script to spider specified web page(s) looking for HREF/SRC values 
+Script to spider specified web page(s) looking for href/src values 
 that do not return successfully.
 
 Defense: Validate external references/resources
@@ -10,20 +10,44 @@ __copyright__ = "Copyright 2016, Hivemind"
 __license__ = "GPL"
 __version__ = "1.0"
 
-import re
 import time
 import argparse
 import requests
+from requests.exceptions import ConnectionError # Because importing the whole thing doesn't work?
 from urlparse import urlparse
 from bs4 import BeautifulSoup
+
+links = {}
 
 # Display status code for external resources
 def check_resource(link, host, allResults):
 	url = urlparse(link)
 	if(url.netloc > '' and url.netloc != host):
-		r = requests.get(link)
-		if(r.status_code != 200 or allResults):
-			print(r.status_code, link)
+		# Skip check if we have already retrieved the link
+		if(link in links):
+			return
+		
+		try:
+			r = requests.get(link)
+		except ConnectionError as exc:
+			print('[-] Server not found: %s ' % link)
+			links[link] = 666
+		else:
+			try:
+				r.raise_for_status()
+			except Exception as excp:
+				# print('[-] Problem: %s - %s' % (link, excp))
+				pass
+			links[link] = r.status_code
+
+def show_results(allResults):
+	print('-'*80)
+	for link in sorted(links, key=links.__getitem__):
+		if(allResults == 1 
+			or (allResults == 0 and links[link] != 200)
+			or (allResults == 4 and links[link] in [404, 410, 666])
+		):
+			print('%d, %s' % (links[link], link))
 
 def get_parser():
 	parser = argparse.ArgumentParser(description='Check external resources of a page to look for resources that are no longer active')
@@ -31,11 +55,14 @@ def get_parser():
 	parser.add_argument('-e', '--error', 
 		help='Show only candiate pages; hide 200\'s (Default: false)',
 		action='store_true')
+	parser.add_argument('-m', '--missing', 
+		help='Show only missing pages (404/410\'s) (Default: false)',
+		action='store_true')
 	parser.add_argument('-s', '--src', 
-		help='Do not check SRC values (Default: false)', 
+		help='Do NOT check SRC values (Default: false)', 
 		action='store_false')
 	parser.add_argument('-a', '--href', 
-		help='Do not check link HREFs (<a href="?") (Default: false)',
+		help='Check HREF resources (<a href="?") (Default: false)',
 		action='store_false')
 	parser.add_argument('-v', '--version',
 		help='Displays the current version of linkerator',
@@ -53,7 +80,10 @@ def main():
 		print('Version: %s', __version__)
 		return
 
-	if args['error']:
+	if args['missing']:
+		print('[+] Showing only 404/410\'s')
+		allResults = 4
+	elif args['error']:
 		print('[+] Omitting result code 200\'s')
 		allResults = 0
 
@@ -71,7 +101,7 @@ def main():
 			soup = BeautifulSoup(base, 'html.parser') 
 
 			# Check external links
-			if(args['href'] == True):
+			if(args['href'] == False):
 				links = soup.find_all(href=True)
 
 				print('[+] Number of HREFs: %d' % len(links))
@@ -98,6 +128,7 @@ def main():
 		print('[+] No action specified. Displaying help')
 		parser.print_help()
 
+	show_results(allResults)
 
 if __name__ == '__main__':
     main()
