@@ -3,7 +3,7 @@ Script to spider specified web page(s) looking for href/src values
 that do not return successfully.
 
 Defense: Validate external references/resources
-Offence: Identify resource that may be hijacked/zombified
+Offense: Identify resource that may be hijacked/zombified
 '''
 __author__ = "Benjamin"
 __copyright__ = "Copyright 2016, Hivemind"
@@ -55,7 +55,8 @@ def show_results(allResults):
 			print('%d, %s' % (links[link], link))
 
 def get_parser():
-	parser = argparse.ArgumentParser(description='Check external resources of a page to look for resources that are no longer active')
+	parser = argparse.ArgumentParser(description='Check external resources of'
+	    + ' a page to look for resources that are no longer active')
 	parser.add_argument("urls", nargs='*', help='Page(s) to spider')
 	parser.add_argument('-e', '--error', 
 		help='Show only candiate pages; hide 200\'s (Default: false)',
@@ -69,6 +70,9 @@ def get_parser():
 	parser.add_argument('-a', '--href', 
 		help='Check HREF resources (<a href="?") (Default: false)',
 		action='store_false')
+	parser.add_argument('-f', '--file', 
+		help='Use file as source of URLs to check',
+		type=str)
 	parser.add_argument('-v', '--version',
 		help='Displays the current version of linkerator',
 		action='store_true')
@@ -76,6 +80,7 @@ def get_parser():
 	return parser
 
 def main():
+	urls = []
 	allResults = 1
 
 	parser = get_parser()
@@ -92,57 +97,60 @@ def main():
 		print('[+] Omitting result code 200\'s')
 		allResults = 0
 
-	if(args['urls']):
-		for url in args['urls']:
-			# Prefix HTTP if it was not specified
-			if(url.find('htt') == -1):
-				url = 'http://' + url
-
-			urlBase = urlparse(url)
-			print('[+] Checking: ' + urlBase.geturl())
-			print('[+] Performed on: ' + time.strftime("%c"))
-
-			try:
-				base = requests.get(urlBase.geturl()).text
-			except ConnectionError as exc:
-				print('[-] Source server not found: %s ' % urlBase.geturl())
-				continue
-			
-			# Complete lazy external references
-			# base = base.replace(r'src="//', r'src="http://')
-			# base = base.replace(r"src='//", r"src='http://")
-			base = re.sub(r'src\s?=\s?\'//', r"src='http://", base)
-			base = re.sub(r'src\s?=\s?\"//', r'src="http://', base)
-			
-			soup = BeautifulSoup(base, 'html.parser') 
-
-			# Check external links
-			if(args['href'] == False):
-				links = soup.find_all(href=True)
-
-				print('[+] Number of HREFs: %d' % len(links))
-
-				for link in links:
-					check_resource(
-						link['href'],
-						urlBase.netloc,
-						allResults
-					)
-
-			# Check external sources/scripts
-			if(args['src'] == True):
-				links = soup.findAll(src=True)
-				print('[+] Number of SRCs: %d' % len(links))
-
-				for link in links:
-					check_resource(
-						link['src'],
-						urlBase.netloc,
-						allResults
-					)
+	if args['urls']:
+		urls = args['urls']
+	elif args['file'] is not None:
+		with open(args['file'], 'r') as f:
+			urls = f.read().splitlines()
 	else:
 		print('[+] No action specified. Displaying help')
 		parser.print_help()
+
+	for url in urls:
+		# Prefix HTTP if it was not specified
+		if(url.find('htt') == -1):
+			url = 'http://' + url
+
+		urlBase = urlparse(url)
+		print('[+] Checking: ' + urlBase.geturl())
+		print('[+] Performed on: ' + time.strftime("%c"))
+
+		try:
+			base = requests.get(urlBase.geturl()).text
+		except ConnectionError as exc:
+			print('[-] Source server not found: %s ' % urlBase.geturl())
+			continue
+		
+		# Complete lazy external references
+		base = re.sub(r'src\s?=\s?\'//', r"src='http://", base)
+		base = re.sub(r'src\s?=\s?\"//', r'src="http://', base)
+		
+		soup = BeautifulSoup(base, 'html.parser') 
+
+		# Check external links
+		if(args['href'] == False):
+			links = soup.find_all(href=True)
+
+			print('[+] Number of HREFs: %d' % len(links))
+
+			for link in links:
+				check_resource(
+					link['href'],
+					urlBase.netloc,
+					allResults
+				)
+
+		# Check external sources/scripts
+		if(args['src'] == True):
+			links = soup.findAll(src=True)
+			print('[+] Number of SRCs: %d' % len(links))
+
+			for link in links:
+				check_resource(
+					link['src'],
+					urlBase.netloc,
+					allResults
+				)
 
 	show_results(allResults)
 
